@@ -1,30 +1,41 @@
 from flask import Flask, request, redirect, jsonify
 import yt_dlp
+import os
 
 app = Flask(__name__)
 
+COOKIE_FILE = "youtube_cookies.txt"
+
 @app.route('/')
 def home():
-    return '<h3>YouTube Proxy Çalışıyor ✅</h3><p>Kullanım: /youtube?id=VIDEO_ID</p>'
+    return "YouTube IPTV Proxy with Cookies is running!"
 
-@app.route('/youtube')
-def youtube():
+@app.route('/stream')
+def stream():
     video_id = request.args.get('id')
     if not video_id:
-        return jsonify({"error": "Eksik id parametresi. ?id=VIDEO_ID"}), 400
+        return jsonify({"error": "Eksik parametre ?id="}), 400
 
-    url = f'https://www.youtube.com/watch?v={video_id}'
+    url = f"https://www.youtube.com/watch?v={video_id}"
+
+    ydl_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "format": "best[ext=m3u8]/best",
+        "cookiefile": COOKIE_FILE
+    }
+
     try:
-        ydl_opts = {"quiet": True, "format": "best"}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            stream_url = info.get("url")
-            if stream_url:
-                return redirect(stream_url)
-            else:
-                return jsonify({"error": "Akış URL’si bulunamadı"}), 404
+            formats = info.get("formats", [])
+            for f in formats:
+                if f.get("protocol") == "m3u8_native":
+                    return redirect(f["url"])
+            return jsonify({"error": "m3u8 link bulunamadı"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)})
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
