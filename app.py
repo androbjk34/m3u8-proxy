@@ -1,41 +1,40 @@
-from flask import Flask, request, redirect, jsonify
-import yt_dlp
-import os
+from flask import Flask, request, Response
+import requests
 
 app = Flask(__name__)
 
-COOKIE_FILE = "youtube_cookies.txt"
-
 @app.route('/')
 def home():
-    return "YouTube IPTV Proxy with Cookies is running!"
+    return '✅ M3U8 Proxy Çalışıyor! Kullanım: /proxy?url=http://...'
 
-@app.route('/stream')
-def stream():
-    video_id = request.args.get('id')
-    if not video_id:
-        return jsonify({"error": "Eksik parametre ?id="}), 400
+@app.route('/proxy')
+def proxy():
+    url = request.args.get('url')
+    if not url:
+        return "❌ Hata: 'url' parametresi eksik. Örnek: /proxy?url=http://...", 400
 
-    url = f"https://www.youtube.com/watch?v={video_id}"
-
-    ydl_opts = {
-        "quiet": True,
-        "skip_download": True,
-        "format": "best[ext=m3u8]/best",
-        "cookiefile": COOKIE_FILE
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "*/*",
+        "Referer": request.host_url
     }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            formats = info.get("formats", [])
-            for f in formats:
-                if f.get("protocol") == "m3u8_native":
-                    return redirect(f["url"])
-            return jsonify({"error": "m3u8 link bulunamadı"})
+        r = requests.get(url, headers=headers, stream=True, timeout=10)
+        content_type = r.headers.get("Content-Type", "application/vnd.apple.mpegurl")
+        
+        def generate():
+            for chunk in r.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+
+        resp = Response(generate(), content_type=content_type)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return f"❌ Proxy hatası: {str(e)}", 500
+
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=10000)
